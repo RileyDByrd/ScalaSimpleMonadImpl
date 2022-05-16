@@ -16,4 +16,8 @@ object FlatMap {
   implicit class FlatMapOps[F[_], A](wrapper: F[A])(implicit flatMap: FlatMap[F]) {
     def flatMap[B](func: A => F[B]): F[B] = flatMap.flatMap(wrapper)(func)
   }
+
+  implicit class FlattenOps[F[_], A](doubleWrapper: F[F[A]])(implicit flatMap: FlatMap[F]) {
+    def flatten: F[A] = flatMap.flatten(doubleWrapper)
+  }
 }
