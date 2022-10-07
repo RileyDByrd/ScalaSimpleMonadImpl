@@ -15,19 +15,9 @@ trait Parallel[M[_]] {
 
   // In a parallel method, work occurs in a parallel but the input and output are sequentials.
 
-  // Parallel Semigroupal methods
+  // Parallel Semigroupal method
   def parProduct[A, B](wrapper1: M[A], wrapper2: M[B]): M[(A, B)] =
     sequential(apply.product(parallel(wrapper1), parallel(wrapper2)))
-  def parTuple2[A, B](wrapper1: M[A], wrapper2: M[B]): M[(A, B)] =
-    flatMap.map(parProduct(wrapper1, wrapper2)) { case (value1, value2) => (value1, value2) }
-  def parTuple3[A, B, C](wrapper1: M[A], wrapper2: M[B], wrapper3: M[C]): M[(A, B, C)] =
-    flatMap.map(parProduct(wrapper1, parProduct(wrapper2, wrapper3))) { case (value1, (value2, value3)) => (value1, value2, value3) }
-
-  // Parallel Functor methods
-  def parMap2[A, B, C](wrapper1: M[A], wrapper2: M[B])(func: (A, B) => C): M[C] =
-    flatMap.map(parProduct(wrapper1, wrapper2)) { case (value1, value2) => func(value1, value2) }
-  def parMap3[A, B, C, D](wrapper1: M[A], wrapper2: M[B], wrapper3: M[C])(func: (A, B, C) => D): M[D] =
-    flatMap.map(parProduct(wrapper1, parProduct(wrapper2, wrapper3))) { case (value1, (value2, value3)) => func(value1, value2, value3) }
 
   // Parallel Apply methods
   def parAp[A, B](application: M[A => B])(wrapper: M[A]): M[B] =
@@ -36,13 +26,22 @@ trait Parallel[M[_]] {
     sequential(apply.ap2(parallel(application))(parallel(wrapper1), parallel(wrapper2)))
   def parAp3[A, B, C, D](application: M[(A, B, C) => D])(wrapper1: M[A], wrapper2: M[B], wrapper3: M[C]): M[D] =
     sequential(apply.ap3(parallel(application))(parallel(wrapper1), parallel(wrapper2), parallel(wrapper3)))
+
+  // Parallel Applicative methods
+  def parMap2[A, B, C](wrapper1: M[A], wrapper2: M[B])(func: (A, B) => C): M[C] =
+    flatMap.map(parProduct(wrapper1, wrapper2)) { case (value1, value2) => func(value1, value2) }
+  def parMap3[A, B, C, D](wrapper1: M[A], wrapper2: M[B], wrapper3: M[C])(func: (A, B, C) => D): M[D] =
+    flatMap.map(parProduct(wrapper1, parProduct(wrapper2, wrapper3))) { case (value1, (value2, value3)) => func(value1, value2, value3) }
+  def parTuple2[A, B](wrapper1: M[A], wrapper2: M[B]): M[(A, B)] =
+    flatMap.map(parProduct(wrapper1, wrapper2)) { case (value1, value2) => (value1, value2) }
+  def parTuple3[A, B, C](wrapper1: M[A], wrapper2: M[B], wrapper3: M[C]): M[(A, B, C)] =
+    flatMap.map(parProduct(wrapper1, parProduct(wrapper2, wrapper3))) { case (value1, (value2, value3)) => (value1, value2, value3) }
 }
 
 object Parallel {
   def apply[M[A]](implicit parallel: Parallel[M]): Parallel[M] = parallel
 
   // Parallel extension methods
-
   implicit class ParallelSemigroupalOps[M[_], A](wrapper1: M[A])(implicit parallel: Parallel[M]) {
     def parProduct[B](wrapper2: M[B]): M[(A, B)] = parallel.parProduct(wrapper1, wrapper2)
   }

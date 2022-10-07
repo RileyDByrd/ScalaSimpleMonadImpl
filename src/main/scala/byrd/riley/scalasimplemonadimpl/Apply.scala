@@ -6,22 +6,12 @@ trait Apply[F[_]] extends Semigroupal[F] with Functor[F] {
 
   // Implement the 2 and 3 versions of methods so that implementors of this trait only have to worry about the 1 version.
   // Any one of product, ap, and map may be defined in terms of the other two.
-
   def ap2[A, B, C](application: F[(A, B) => C])(wrapper1: F[A], wrapper2: F[B]): F[C] =
     map(product(wrapper1, product(wrapper2, application))) { case (value1, (value2, func)) => func(value1, value2) }
   def ap3[A, B, C, D](application: F[(A, B, C) => D])(wrapper1: F[A], wrapper2: F[B], wrapper3: F[C]): F[D] =
-    map(product(wrapper1, product(wrapper2, product(wrapper3, application)))) { case (value1, (value2, (value3, func))) => func(value1, value2, value3) }
-
-  override def map2[A, B, C](wrapper1: F[A], wrapper2: F[B])(func: (A, B) => C): F[C] =
-    ap(map(wrapper1)(value1 => (value2: B) => func(value1, value2)))(wrapper2)
-  override def map3[A, B, C, D](wrapper1: F[A], wrapper2: F[B], wrapper3: F[C])(func: (A, B, C) => D): F[D] =
-    ap(ap(map(wrapper1)(value1 => (value2: B) => (value3: C) => func(value1, value2, value3)))(wrapper2))(wrapper3)
-
-  override def tuple2[A, B](wrapper1: F[A], wrapper2: F[B]): F[(A, B)] =
-    map2(wrapper1, wrapper2)((_, _))
-  override def tuple3[A, B, C](wrapper1: F[A], wrapper2: F[B], wrapper3: F[C]): F[(A, B, C)] =
-    map3(wrapper1, wrapper2, wrapper3)((_, _, _))
-
+    map(product(wrapper1, product(wrapper2, product(wrapper3, application)))) {
+      case (value1, (value2, (value3, func))) => func(value1, value2, value3)
+    }
 }
 
 object Apply {
