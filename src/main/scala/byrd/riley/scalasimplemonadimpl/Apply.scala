@@ -6,8 +6,8 @@ trait Apply[F[_]] extends Semigroupal[F] with Functor[F]:
   // Any one of product, ap, and map may be defined in terms of the other two.
 
 object Apply:
-  def apply[F[A]](implicit apply: Apply[F]): Apply[F] = apply
+  def apply[F[A]](using apply: Apply[F]): Apply[F] = apply
 
-  implicit class ApplyOps[F[_], A, B](application: F[A => B])(implicit apply: Apply[F]):
+  extension[F[_], A, B](application: F[A => B])(using apply: Apply[F])
     def ap(wrapper: F[A]): F[B] = apply.ap(application)(wrapper)
   

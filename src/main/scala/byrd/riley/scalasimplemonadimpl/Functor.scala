@@ -5,7 +5,7 @@ trait Functor[F[_]]:
 
 
 object Functor:
-  def apply[F[_]](implicit functor: Functor[F]): Functor[F] = functor
+  def apply[F[_]](using functor: Functor[F]): Functor[F] = functor
 
-  implicit class FunctorOps[F[_], A](wrapper: F[A])(implicit functor: Functor[F]):
+  extension[F[_], A](wrapper: F[A])(using functor: Functor[F])
     def map[B](func: A => B): F[B] = functor.map(wrapper)(func)

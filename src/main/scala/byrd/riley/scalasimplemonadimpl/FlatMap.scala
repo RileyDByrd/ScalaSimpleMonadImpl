@@ -10,10 +10,10 @@ trait FlatMap[F[_]] extends Apply[F]:
     assert(flatMap(flatMap(wrapper)(funcF))(funcG) == flatMap(wrapper)(value => flatMap(funcF(value))(funcG)))
 
 object FlatMap:
-  def apply[F[A]](implicit flatMap: FlatMap[F]): FlatMap[F] = flatMap
+  def apply[F[A]](using flatMap: FlatMap[F]): FlatMap[F] = flatMap
 
-  implicit class FlatMapOps[F[_], A](wrapper: F[A])(implicit flatMap: FlatMap[F]):
+  extension[F[_], A](wrapper: F[A])(using flatMap: FlatMap[F])
     def flatMap[B](func: A => F[B]): F[B] = flatMap.flatMap(wrapper)(func)
 
-  implicit class FlattenOps[F[_], A](doubleWrapper: F[F[A]])(implicit flatMap: FlatMap[F]):
+  extension[F[_], A](doubleWrapper: F[F[A]])(using flatMap: FlatMap[F])
     def flatten: F[A] = flatMap.flatten(doubleWrapper)

@@ -1,5 +1,7 @@
 package byrd.riley.scalasimplemonadimpl
 
+import scala.annotation.tailrec
+
 // "Applicative" is short for "Applicative Functor".
 trait Applicative[F[_]] extends Apply[F]:
   // i.e. wrap
@@ -10,34 +12,43 @@ trait Applicative[F[_]] extends Apply[F]:
     assert(ap(pure((value: A) => value))(wrapper) == wrapper)
 
 object Applicative:
-  def apply[F[_]](implicit applicative: Applicative[F]): Applicative[F] = applicative
-
-  def getIdentityTupleFor[A](value: A): TupleTypeMatchers.IdentityTuple[A] =
-    value match
-      case tuple: Tuple => tuple
-      case _ => Tuple1(value)
+  def apply[F[_]](using applicative: Applicative[F]): Applicative[F] = applicative
 
   // Does not override .pure if a class has already implemented it, which means Monad instead of MyMonad will be used.
-  implicit class ApplicativeOps[F[_], A](value: A)(implicit applicative: Applicative[F]):
-    def pure: F[A] = applicative.pure(value)
+  extension[F[_]: Applicative, A](value: A)
+    def pure: F[A] = Applicative[F].pure(value)
 
-  def inverseMap[F[_], X](tuple: Tuple)(implicit ev: Tuple.IsMappedBy[F][X], applicator: Apply[F]): Tuple.InverseMap[tuple.type, F] =
-    inverseMap(tuple, applicator).asInstanceOf[Tuple.InverseMap[tuple.type, F]]
+  def invertMap[F[_] : Applicative, T <: Tuple : Tuple.IsMappedBy[F]](tuple: T): F[Tuple.InverseMap[tuple.type, F]] =
+    invertMapLoop[F, None.type](tuple, None).asInstanceOf[F[Tuple.InverseMap[tuple.type, F]]]
 
-  def inverseMap[F[_]](tuple: Tuple, applicator: Apply[F]): Tuple =
+  @tailrec
+  private def invertMapLoop[F[_] : Applicative, Z](tuple: Tuple, carryOver: Option[F[Z]]): F[Tuple.InverseMap[Tuple, F]] =
     tuple match
-      case EmptyTuple => EmptyTuple
-      case head *: tail => applicator.product(head, inverseMap(tail))
+      case EmptyTuple => EmptyTuple.asInstanceOf[F[Tuple.InverseMap[Tuple, F]]]
+      case (head: F[x]) *: EmptyTuple =>
+        carryOver match
+          case Some(value: F[Z]) => Applicative[F].product(value, head).asInstanceOf[F[Tuple.InverseMap[Tuple, F]]]
+          case None => (head *: EmptyTuple).asInstanceOf[F[Tuple.InverseMap[Tuple, F]]]
+      case (head: F[x]) *: tail =>
+        carryOver match
+          case Some(value: F[Z]) =>
+            val newCarryOver = Some(Applicative[F].product(value, head))
+            invertMapLoop[F, TupleHelper.FlatConcat[Z, x]](tail, newCarryOver)
+          case None =>
+            val newCarryOver = Some(head)
+            invertMapLoop[F, x](tail, newCarryOver)
 
   // Applicative functors are for working on multiple structures. Thus, all tuple operations are here.
-  implicit class ApplicativeTupleOps[F[_], X](val tuple: Tuple)(implicit ev: Tuple.IsMappedBy[F][X]):
-    val invertedTuple: Tuple.InverseMap[tuple.type, F] = inverseMap(tuple)
+  extension[F[_], T <: Tuple](tuple: T)(using Applicative[F], Tuple.IsMappedBy[F][T])
+    private def invertedTuple: F[Tuple.InverseMap[tuple.type, F]] = invertMap(tuple)
 
-    def mapN[A, B](func: Tuple.InverseMap[tuple.type, F] => B)(implicit applicative: Applicative[F]): F[B] =
-      applicative.pure(func(invertedTuple))
+    def mapN[A](func: Tuple.InverseMap[tuple.type, F] => A): F[A] =
+      Applicative[F].map(invertedTuple)(func)
 
-    def tupled(implicit applicative: Applicative[F]): F[Tuple.InverseMap[tuple.type, F]] =
+    def tupled: F[Tuple.InverseMap[tuple.type, F]] =
       mapN(identity)
 
-    def apWith[B](application: F[Tuple.InverseMap[tuple.type, F] => B])(implicit applicator: Apply[F]): F[B] =
-      applicator.map(application)(func => func(invertedTuple))
+    def apWith[B](application: F[Tuple.InverseMap[tuple.type, F] => B]): F[B] =
+      Applicative[F].map(Applicative[F].product(application, invertedTuple)) {
+        case (func: (Tuple.InverseMap[tuple.type, F] => B)) *: (tail: Tuple.InverseMap[tuple.type, F]) => func(tail).asInstanceOf[B]
+      }

@@ -1,9 +1,7 @@
 package byrd.riley.scalasimplemonadimpl
 
-import TupleTypeMatchers.*
-
 trait Semigroupal[F[_]]:
-  def product[A, B](wrapper1: F[A], wrapper2: F[B]): F[FlatConcat[A, B]]
+  def product[A, B](wrapper1: F[A], wrapper2: F[B]): F[TupleHelper.FlatConcat[A, B]]
 
   // This law does not apply to Scala 2 because it doesn't natively support bijection for tuples.
   def associativeLaw[A, B, C](wrapper1: F[A], wrapper2: F[B], wrapper3: F[C]): Unit =
@@ -11,7 +9,7 @@ trait Semigroupal[F[_]]:
 
 
 object Semigroupal:
-  def apply[F[A]](implicit semigroupal: Semigroupal[F]): Semigroupal[F] = semigroupal
+  def apply[F[A]](using semigroupal: Semigroupal[F]): Semigroupal[F] = semigroupal
 
-  implicit class SemigroupalOps[F[_], A](wrapper1: F[A])(implicit semigroupal: Semigroupal[F]):
-    def product[B](wrapper2: F[B]): F[FlatConcat[A, B]] = semigroupal.product(wrapper1, wrapper2)
+  extension[F[_], A](wrapper1: F[A])(using semigroupal: Semigroupal[F])
+    def product[B](wrapper2: F[B]): F[TupleHelper.FlatConcat[A, B]] = semigroupal.product(wrapper1, wrapper2)

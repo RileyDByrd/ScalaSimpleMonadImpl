@@ -1,6 +1,8 @@
 package byrd.riley.scalasimplemonadimpl
 
-trait Parallel[M[_]] {
+import scala.annotation.tailrec
+
+trait Parallel[M[_]]:
   type F[_]
 
   // i.e. the parallel.
@@ -16,48 +18,47 @@ trait Parallel[M[_]] {
   // In a parallel method, work occurs in a parallel but the input and output are sequentials.
 
   // Parallel Semigroupal method
-  def parProduct[A, B](wrapper1: M[A], wrapper2: M[B]): M[(A, B)] =
+  def parProduct[A, B](wrapper1: M[A], wrapper2: M[B]): M[TupleHelper.FlatConcat[A, B]] =
     sequential(apply.product(parallel(wrapper1), parallel(wrapper2)))
 
-  // Parallel Apply methods
+  // Parallel Apply method
   def parAp[A, B](application: M[A => B])(wrapper: M[A]): M[B] =
     sequential(apply.ap(parallel(application))(parallel(wrapper)))
-  def parAp2[A, B, C](application: M[(A, B) => C])(wrapper1: M[A], wrapper2: M[B]): M[C] =
-    sequential(apply.ap2(parallel(application))(parallel(wrapper1), parallel(wrapper2)))
-  def parAp3[A, B, C, D](application: M[(A, B, C) => D])(wrapper1: M[A], wrapper2: M[B], wrapper3: M[C]): M[D] =
-    sequential(apply.ap3(parallel(application))(parallel(wrapper1), parallel(wrapper2), parallel(wrapper3)))
 
-  // Parallel Applicative methods
-  def parMap2[A, B, C](wrapper1: M[A], wrapper2: M[B])(func: (A, B) => C): M[C] =
-    flatMap.map(parProduct(wrapper1, wrapper2)) { case (value1, value2) => func(value1, value2) }
-  def parMap3[A, B, C, D](wrapper1: M[A], wrapper2: M[B], wrapper3: M[C])(func: (A, B, C) => D): M[D] =
-    flatMap.map(parProduct(wrapper1, parProduct(wrapper2, wrapper3))) { case (value1, (value2, value3)) => func(value1, value2, value3) }
-  def parTuple2[A, B](wrapper1: M[A], wrapper2: M[B]): M[(A, B)] =
-    flatMap.map(parProduct(wrapper1, wrapper2)) { case (value1, value2) => (value1, value2) }
-  def parTuple3[A, B, C](wrapper1: M[A], wrapper2: M[B], wrapper3: M[C]): M[(A, B, C)] =
-    flatMap.map(parProduct(wrapper1, parProduct(wrapper2, wrapper3))) { case (value1, (value2, value3)) => (value1, value2, value3) }
-}
-
-object Parallel {
-  def apply[M[A]](implicit parallel: Parallel[M]): Parallel[M] = parallel
+object Parallel:
+  def apply[M[A]](using parallel: Parallel[M]): Parallel[M] = parallel
 
   // Parallel extension methods
-  implicit class ParallelSemigroupalOps[M[_], A](wrapper1: M[A])(implicit parallel: Parallel[M]) {
-    def parProduct[B](wrapper2: M[B]): M[(A, B)] = parallel.parProduct(wrapper1, wrapper2)
-  }
+  extension[M[_], A](wrapper1: M[A])(using parallel: Parallel[M])
+    def parProduct[B](wrapper2: M[B]): M[TupleHelper.FlatConcat[A, B]] = parallel.parProduct(wrapper1, wrapper2)
 
-  implicit class ParallelApplyOps[M[_], A, B](application: M[A => B])(implicit parallel: Parallel[M]) {
+  extension[M[_], A, B](application: M[A => B])(using parallel: Parallel[M])
     def parAp(wrapper: M[A]): M[B] = parallel.parAp(application)(wrapper)
-  }
 
-  implicit class ParTuple2Ops[M[_], A, B](tuple2: (M[A], M[B]))(implicit parallel: Parallel[M]) {
-    def parTupled: M[(A, B)] = parallel.parTuple2(tuple2._1, tuple2._2)
-    def parMapN[C](func: (A, B) => C): M[C] = parallel.parMap2(tuple2._1, tuple2._2)(func)
-    def parApWith[C](application: M[(A, B) => C]): M[C] = parallel.parAp2(application)(tuple2._1, tuple2._2)
-  }
-  implicit class ParTuple3Ops[M[_], A, B, C](tuple3: (M[A], M[B], M[C]))(implicit parallel: Parallel[M]) {
-    def parTupled: M[(A, B, C)] = parallel.parTuple3(tuple3._1, tuple3._2, tuple3._3)
-    def parMapN[D](func: (A, B, C) => D): M[D] = parallel.parMap3(tuple3._1, tuple3._2, tuple3._3)(func)
-    def parApWith[D](application: M[(A, B, C) => D]): M[D] = parallel.parAp3(application)(tuple3._1, tuple3._2, tuple3._3)
-  }
-}
+  def invertMap[M[_] : Parallel, T <: Tuple : Tuple.IsMappedBy[M]](tuple: T): M[Tuple.InverseMap[tuple.type, M]] =
+    invertMapLoop[M, None.type](tuple, None).asInstanceOf[M[Tuple.InverseMap[tuple.type, M]]]
+
+  @tailrec
+  private def invertMapLoop[M[_] : Parallel, Z](tuple: Tuple, carryOver: Option[M[Z]]): M[Tuple.InverseMap[Tuple, M]] =
+    tuple match
+      case EmptyTuple => EmptyTuple.asInstanceOf[M[Tuple.InverseMap[Tuple, M]]]
+      case (head: M[x]) *: EmptyTuple =>
+        carryOver match
+          case Some(value: M[Z]) => Parallel[M].parProduct(value, head).asInstanceOf[M[Tuple.InverseMap[Tuple, M]]]
+          case None => (head *: EmptyTuple).asInstanceOf[M[Tuple.InverseMap[Tuple, M]]]
+      case (head: M[x]) *: tail =>
+        carryOver match
+          case Some(value: M[Z]) =>
+            val newCarryOver = Some(Parallel[M].parProduct(value, head))
+            invertMapLoop[M, TupleHelper.FlatConcat[Z, x]](tail, newCarryOver)
+          case None =>
+            val newCarryOver = Some(head)
+            invertMapLoop[M, x](tail, newCarryOver)
+
+  extension[M[_], T <: Tuple](tuple: T)(using Parallel[M], Tuple.IsMappedBy[M][T])
+    private def invertedTuple: M[Tuple.InverseMap[tuple.type, M]] = invertMap(tuple)
+    def parMapN[A](func: Tuple.InverseMap[tuple.type, M] => A): M[A] = Parallel[M].flatMap.map(invertedTuple)(func)
+    def parTupled: M[Tuple.InverseMap[tuple.type, M]] = parMapN(identity)
+    def parApWith[B](application: M[Tuple.InverseMap[tuple.type, M] => B]): M[B] = Parallel[M].flatMap.map(Parallel[M].parProduct(application, invertedTuple)) {
+      case (func: (Tuple.InverseMap[tuple.type, M] => B)) *: (tail: Tuple.InverseMap[tuple.type, M]) => func(tail).asInstanceOf[B]
+    }
