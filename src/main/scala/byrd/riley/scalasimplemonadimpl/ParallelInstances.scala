@@ -5,6 +5,7 @@ import byrd.riley.scalasimplemonadimpl.TupleHelper.FlatConcat
 object ParallelInstances:
   // Define some commonly used Parallels.
 
+  // parTupled for a List will zip the lists rather than find the cartesian product of them.
   class ZipList[A](val value: List[A]) extends AnyVal
   object ZipList:
     def apply[A](value: List[A]): ZipList[A] = new ZipList(value)
@@ -44,6 +45,9 @@ object ParallelInstances:
     // override def sequential: ZipList ~> List = new (ZipList ~> List) { override def apply[A](value: ZipList[A]): List[A] = value.value }
     override def sequential[A]: ZipList[A] => List[A] = _.value
 
+  // parTupled for an Either requires that the left type be a Semigroup because, unlike product, it does not fail fast.
+  // If it encounters more than one left, it will combine them as defined in Semigroup.combine. For rights, output
+  // should be unchanged.
   import Validated._
   class Validated[+E, +A]:
     def isValid: Boolean =
