@@ -1,13 +1,14 @@
 package byrd.riley.scalasimplemonadimpl
 
 // F[_] represents a type that requires one type parameter (e.g. Option[_]).
-trait Monad[F[_]] extends FlatMap[F] with Applicative[F]:
+trait Monad[F[_]] extends FlatMap[F], Applicative[F]:
   // Define the major methods of Semigroupal, Apply, and Functor in terms of FlatMap and Applicative. This means that
   // the only thing that implementors have to do is define `flatMap` and `pure`.
   
-  override def product[A, B](wrapper1: F[A], wrapper2: F[B]): F[TupleHelper.FlatConcat[A, B]] = {
-    flatMap(wrapper1)(value1 =>
-      flatMap(wrapper2) { value2 =>
+  extension[A](monad1: F[A])
+    override def product[B](monad2: F[B]): F[TupleHelper.FlatConcat[A, B]] =
+    monad1.flatMap(value1 =>
+      monad2.flatMap { value2 =>
         val tuple1: TupleHelper.IdentityTuple[value1.type] = TupleHelper.getIdentityTupleFor(value1)
         val tuple2: TupleHelper.IdentityTuple[value2.type] = TupleHelper.getIdentityTupleFor(value2)
         val flat1: TupleHelper.Flat[tuple1.type] = tuple1.flatten
@@ -16,21 +17,26 @@ trait Monad[F[_]] extends FlatMap[F] with Applicative[F]:
         pure(flattenedProduct.asInstanceOf[TupleHelper.FlatConcat[A, B]])
       }
     )
-  }
 
-  override def ap[A, B](application: F[A => B])(wrapper: F[A]): F[B] =
-    flatMap(application)((func: A => B) => flatMap(wrapper)(value => pure(func(value))))
-
-  override def map[A, B](wrapper: F[A])(func: A => B): F[B] =
-    flatMap(wrapper)(value => pure(func(value)))
-
+    override def map[B](func: A => B): F[B] =
+      monad1.flatMap(value => func(value).pure)
+    
+  extension[A, B](application: F[A => B])
+    override def ap(monad: F[A]): F[B] =
+      application.flatMap((func: A => B) => monad.flatMap(value => func(value).pure))
+  
   // Left identity: calling pure and transforming the result with func is the same as calling func.
-  def leftIdentityLaw[A, B](value: A, func: A => F[B]): Unit =
-    assert(flatMap(pure(value))(func) == func(value))
+  // Very similar to identityApplyLaw.
+  def leftIdentityMonadLaw[A, B](value: A, func: A => F[B]): Unit =
+    assert(value.pure.flatMap(func) == func(value))
 
   // Right identity: passing pure to flatMap is the same as doing nothing.
-  def rightIdentityLaw[A](wrapper: F[A]): Unit =
-    assert(flatMap(wrapper)(pure) == wrapper)
+  def rightIdentityMonadLaw[A](monad: F[A]): Unit =
+    assert(monad.flatMap(_.pure) == monad)
+
+  // Provide a cleaner implementation of the identityFlatMapLaw since pure is available.
+  override def identityFlatMapLaw[A](flatMap: F[A]): Unit =
+    rightIdentityMonadLaw(flatMap)
 
 object Monad:
   def apply[F[A]](using monad: Monad[F]): Monad[F] = monad

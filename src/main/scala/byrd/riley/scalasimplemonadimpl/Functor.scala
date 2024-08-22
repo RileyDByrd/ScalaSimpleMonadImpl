@@ -1,11 +1,16 @@
 package byrd.riley.scalasimplemonadimpl
 
 trait Functor[F[_]]:
-  def map[A, B](wrapper: F[A])(func: A => B): F[B]
+  extension[A](functor: F[A])
+    def map[B](func: A => B): F[B]
 
+  // Mapping a value to itself should yield an equal functor.
+  def identityFunctorLaw[A](functor: F[A]): Unit =
+    assert(functor.map(identity) == functor)
+
+  // Associativity: mapping over f and then mapping over g is the same as mapping over two functions f and g.
+  def associativeFunctorLaw[A, B, C](functor: F[A], funcF: A => B, funcG: B => C): Unit =
+    assert(functor.map(funcF).map(funcG) == functor.map(value => funcG(funcF(value))))
 
 object Functor:
   def apply[F[_]](using functor: Functor[F]): Functor[F] = functor
-
-  extension[F[_], A](wrapper: F[A])(using functor: Functor[F])
-    def map[B](func: A => B): F[B] = functor.map(wrapper)(func)

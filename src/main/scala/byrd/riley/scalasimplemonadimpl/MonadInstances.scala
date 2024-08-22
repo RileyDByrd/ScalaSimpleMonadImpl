@@ -1,47 +1,74 @@
 package byrd.riley.scalasimplemonadimpl
 
-import byrd.riley.scalasimplemonadimpl.Id.Id
+import Id.Id
 
 import scala.collection.mutable.ListBuffer
 
 object MonadInstances:
   // Define some commonly used Monads.
 
-  given Monad[Option] = new Monad[Option]:
-    override def pure[A](value: A): Option[A] = Some(value)
+  enum Maybe[+A]:
+    case Attested(value: A)
+    case Unattested
 
-    override def flatMap[A, B](option: Option[A])(func: A => Option[B]): Option[B] =
-      option match
-        case Some(value) => func(value)
-        case None        => None
+  import Maybe.*
 
-  given Monad[List] = new Monad[List]:
-    override def pure[A](value: A): List[A] = List(value)
+  given Monad[Maybe] = new Monad[Maybe]:
+    extension [A](value: A)
+      override def pure: Maybe[A] = Attested(value)
+    extension [A](option: Maybe[A])
+      override def flatMap[B](func: A => Maybe[B]): Maybe[B] =
+        option match
+          case Attested(value)   => func(value)
+          case Unattested        => Unattested
 
-    override def flatMap[A, B](value: List[A])(func: A => List[B]): List[B] = {
-      val listToReturn = new ListBuffer[B]
+  sealed trait LinkedList[+A]:
+    def internalList: List[A]
 
-      value.foreach(elem =>
-        func(elem).foreach(transformedElem =>
-          listToReturn.addOne(transformedElem)
+  final case class LinkedCons[+A](head: A, tail: LinkedList[A]) extends LinkedList[A]:
+    override val internalList: List[A] = scala.collection.immutable.::(head, tail.internalList)
+
+  case object LinkedNil extends LinkedList[Nothing]:
+    override val internalList: List[Nothing] = Nil
+
+  object LinkedList:
+    def apply[A](list: List[A]): LinkedList[A] =
+      list.foldLeft(LinkedNil: LinkedList[A])((linkedList, elem) => LinkedCons(elem, linkedList))
+
+  given Monad[LinkedList] = new Monad[LinkedList]:
+    extension [A](value: A)
+      override def pure: LinkedList[A] = LinkedCons(value, LinkedNil)
+    extension [A](list: LinkedList[A])
+      override def flatMap[B](func: A => LinkedList[B]): LinkedList[B] =
+        val listToReturn = new ListBuffer[B]
+
+        list.internalList.foreach(elem =>
+          func(elem).internalList.foreach(transformedElem =>
+            listToReturn.addOne(transformedElem)
+          )
         )
-      )
 
-      listToReturn.toList
-    }
+        LinkedList(listToReturn.toList)
 
   given Monad[Id] = new Monad[Id]:
-    override def pure[A](value: A): Id[A] = value
+    extension [A](value: A)
+      override def pure: Id[A] = value
+    extension [A](value: Id[A])
+      override def flatMap[B](func: A => Id[B]): Id[B] = func(value)
+      override def map[B](func: A => B): Id[B] = func(value)
 
-    // Note that flatMap and map for Monad[Id] are identical.
-    override def flatMap[A, B](value: Id[A])(func: A => Id[B]): Id[B] = func(value)
-
-    override def map[A, B](value: Id[A])(func: A => B): Id[B] = func(value)
-
+  enum Disjunction[+A, +B]:
+    case Sad(value: A)
+    case Happy(value: B)
+  
+  import Disjunction.*
+    
   // The Either Monad requires kind projection.
-  given given_Monad_Either[C]: Monad[Either[C, _]] = new Monad[Either[C, _]]:
-    override def pure[A](value: A): Either[C, A] = Right(value)
-    override def flatMap[A, B](wrapper: Either[C, A])(func: A => Either[C, B]): Either[C, B] =
-      wrapper match
-        case Right(value) => func(value)
-        case Left(value) => Left(value)
+  given[C]: Monad[Disjunction[C, _]] = new Monad[Disjunction[C, _]]:
+    extension [A](value: A)
+      override def pure: Disjunction[C, A] = Happy(value)
+    extension [A](either: Disjunction[C, A])
+      override def flatMap[B](func: A => Disjunction[C, B]): Disjunction[C, B] =
+      either match
+        case Happy(value) => func(value)
+        case Sad(value) => Sad(value)

@@ -1,51 +1,63 @@
 package byrd.riley.scalasimplemonadimpl
 
-import byrd.riley.scalasimplemonadimpl.TupleHelper.FlatConcat
+import MonadInstances.Disjunction.{Happy, Sad}
+import MonadInstances.{Disjunction, LinkedList}
+import TupleHelper.FlatConcat
 
 object ParallelInstances:
   // Define some commonly used Parallels.
 
   // parTupled for a List will zip the lists rather than find the cartesian product of them.
-  class ZipList[A](val value: List[A]) extends AnyVal
-  object ZipList:
-    def apply[A](value: List[A]): ZipList[A] = new ZipList(value)
+  sealed trait ZipList[+A]:
+    def internalList: List[A]
 
-  given Parallel[List] = new Parallel[List]:
+  final case class ZipCons[+A](head: A, tail: ZipList[A]) extends ZipList[A]:
+    override val internalList: List[A] = scala.collection.immutable.::(head, tail.internalList)
+
+  case object ZipNil extends ZipList[Nothing]:
+    override val internalList: List[Nothing] = Nil
+
+  object ZipList:
+    def apply[A](list: List[A]): ZipList[A] =
+      list.foldLeft(ZipNil: ZipList[A])((linkedList, elem) => ZipCons(elem, linkedList))
+
+  given Parallel[LinkedList] = new Parallel[LinkedList]:
     import TupleHelper.flatten
 
     override type F[A] = ZipList[A]
 
     override def apply: Apply[ZipList] = new Apply[ZipList]:
-      override def product[A, B](wrapper1: ZipList[A], wrapper2: ZipList[B]): ZipList[TupleHelper.FlatConcat[A, B]] = {
-        val zippedList = wrapper1.value.zip(wrapper2.value)
-        val flattenedList: List[TupleHelper.FlatConcat[A, B]] = zippedList.map { tuple =>
-          val tuple1: TupleHelper.IdentityTuple[tuple._1.type] = TupleHelper.getIdentityTupleFor(tuple._1)
-          val tuple2: TupleHelper.IdentityTuple[tuple._2.type] = TupleHelper.getIdentityTupleFor(tuple._2)
-          val flat1: TupleHelper.Flat[tuple1.type] = tuple1.flatten
-          val flat2: TupleHelper.Flat[tuple2.type] = tuple2.flatten
-          val flattenedProduct: Tuple.Concat[flat1.type, flat2.type] = flat1 ++ flat2
+      extension [A](zipList1: ZipList[A])
+        override def product[B](zipList2: ZipList[B]): ZipList[FlatConcat[A, B]] =
+          val zippedList = zipList1.internalList.zip(zipList2.internalList)
+          val flattenedList: List[TupleHelper.FlatConcat[A, B]] = zippedList.map { tuple =>
+            val tuple1: TupleHelper.IdentityTuple[tuple._1.type] = TupleHelper.getIdentityTupleFor(tuple._1)
+            val tuple2: TupleHelper.IdentityTuple[tuple._2.type] = TupleHelper.getIdentityTupleFor(tuple._2)
+            val flat1: TupleHelper.Flat[tuple1.type] = tuple1.flatten
+            val flat2: TupleHelper.Flat[tuple2.type] = tuple2.flatten
+            val flattenedProduct: Tuple.Concat[flat1.type, flat2.type] = flat1 ++ flat2
 
-          flattenedProduct.asInstanceOf[TupleHelper.FlatConcat[A, B]]
-        }
-        ZipList(flattenedList)
-      }
+            flattenedProduct.asInstanceOf[TupleHelper.FlatConcat[A, B]]
+          }
+          ZipList(flattenedList)
 
-      override def map[A, B](wrapper: ZipList[A])(func: A => B): ZipList[B] =
-        ZipList(wrapper.value.map(func))
+      extension [A](zipList: ZipList[A])
+        override def map[B](func: A => B): ZipList[B] = ZipList(zipList.internalList.map(func))
 
-      override def ap[A, B](application: ZipList[A => B])(wrapper: ZipList[A]): ZipList[B] =
-        ZipList(application.value.lazyZip(wrapper.value).map(_.apply(_)))
+      extension [A, B](application: ZipList[A => B])
+        override def ap(zipList: ZipList[A]): ZipList[B] = ZipList(application.internalList.lazyZip(zipList.internalList).map(_.apply(_)))
 
-    import MonadInstances.given_Monad_List
-    override def flatMap: FlatMap[List] = FlatMap[List]
 
-    // override def parallel: List ~> ZipList = new (List ~> ZipList) { override def apply[A](value: List[A]): ZipList[A] = new ZipList(value) }
-    override def parallel[A]: List[A] => ZipList[A] = new ZipList(_)
+    import MonadInstances.given_Monad_LinkedList
+    override def flatMap: FlatMap[LinkedList] = FlatMap[LinkedList]
 
-    // override def sequential: ZipList ~> List = new (ZipList ~> List) { override def apply[A](value: ZipList[A]): List[A] = value.value }
-    override def sequential[A]: ZipList[A] => List[A] = _.value
+    // override def parallel: LinkedList ~> ZipList = new (LinkedList ~> ZipList) { override def apply[A](value: LinkedList[A]): ZipList[A] = ZipList(value.internalList) }
+    override def parallel[A]: LinkedList[A] => ZipList[A] = linkedList => ZipList(linkedList.internalList)
 
-  // parTupled for an Either requires that the left type be a Semigroup because, unlike product, it does not fail fast.
+    // override def sequential: ZipList ~> LinkedList = new (ZipList ~> LinkedList) { override def apply[A](value: ZipList[A]): LinkedList[A] = LinkedList(value.internalList) }
+    override def sequential[A]: ZipList[A] => LinkedList[A] = zippedList => LinkedList(zippedList.internalList)
+
+  // parTupled for a Disjunction requires that the left type be a Semigroup because, unlike product, it does not fail fast.
   // If it encounters more than one left, it will combine them as defined in Semigroup.combine. For rights, output
   // should be unchanged.
   import Validated._
@@ -71,12 +83,12 @@ object ParallelInstances:
         case (error @ Invalid(_), _) => error
         case (_, error @ Invalid(_)) => error
 
-    def toEither: Either[E, A] =
+    def toDisjunction: Disjunction[E, A] =
       this match
-        case Invalid(error) => Left(error)
-        case Valid(value) => Right(value)
+        case Invalid(error) => Sad(error)
+        case Valid(value) => Happy(value)
 
-    def withEither[EE, B](func: Either[E, A] => Either[EE, B]): Validated[EE, B] = Validated.fromEither(func(toEither))
+    def withDisjunction[EE, B](func: Disjunction[E, A] => Disjunction[EE, B]): Validated[EE, B] = func(toDisjunction).toValidated
 
   object Validated:
     case class Valid[+A](value: A) extends Validated[Nothing, A]
@@ -97,40 +109,36 @@ object ParallelInstances:
         case (error@Invalid(_), _) => error
         case (_, error@Invalid(_)) => error
 
-    def fromEither[E, A](either: Either[E, A]): Validated[E, A] = either.fold(Invalid(_), Valid(_))
-
-    extension[E, A](either: Either[E, A])
+    extension[E, A](disjunction: Disjunction[E, A])
       def toValidated: Validated[E, A] =
-        either match
-          case Left(error) => Invalid(error)
-          case Right(value) => Valid(value)
+        disjunction match
+          case Sad(error) => Invalid(error)
+          case Happy(value) => Valid(value)
 
-  given given_Parallel_Either[E: Semigroup]: Parallel[Either[E, _]] = new Parallel[Either[E, _]]:
+  given[E: Semigroup]: Parallel[Disjunction[E, _]] = new Parallel[Disjunction[E, _]]:
     override type F[A] = Validated[E, A]
 
     override def apply: Apply[Validated[E, _]] =
       new Apply[Validated[E, _]]:
-        override def product[A, B](wrapper1: Validated[E, A], wrapper2: Validated[E, B]): Validated[E, TupleHelper.FlatConcat[A, B]] =
-          Validated.product(wrapper1, wrapper2)
+        extension [A](validated1: Validated[E, A])
+          override def product[B](validated2: Validated[E, B]): Validated[E, FlatConcat[A, B]] = Validated.product(validated1, validated2)
+        extension [A](validated: Validated[E, A])
+          override def map[B](func: A => B): Validated[E, B] = validated.map(func)
+        extension [A, B](application: Validated[E, A => B])
+          override def ap(validated: Validated[E, A]): Validated[E, B] = validated.ap(application)
 
-        override def map[A, B](wrapper: Validated[E, A])(func: A => B): Validated[E, B] =
-          wrapper.map(func)
+    import MonadInstances.given_Monad_Disjunction
+    override def flatMap: FlatMap[Disjunction[E, _]] = FlatMap[Disjunction[E, _]]
 
-        override def ap[A, B](application: Validated[E, A => B])(wrapper: Validated[E, A]): Validated[E, B] =
-          wrapper.ap(application)
-
-    import MonadInstances.given_Monad_Either
-    override def flatMap: FlatMap[Either[E, _]] = FlatMap[Either[E, _]]
-
-    // override def parallel[A]: ({type lam[Y] = Either[E, Y]})#lam[A] => ({type lam[Y] = Validated[E, Y]})#lam[A] = {
-    //      new (({type lam[Y] = Either[E, Y]})#lam[A] => ({type lam[Y] = Validated[E, Y]})#lam[A]) {
-    //        override def apply(value: Either[E, A]): Validated[E, A] = value.toValidated
+    // override def parallel[A]: ({type lam[Y] = Disjunction[E, Y]})#lam[A] => ({type lam[Y] = Validated[E, Y]})#lam[A] = {
+    //      new (({type lam[Y] = Disjunction[E, Y]})#lam[A] => ({type lam[Y] = Validated[E, Y]})#lam[A]) {
+    //        override def apply(value: Disjunction[E, A]): Validated[E, A] = value.toValidated
     //      }
     //    }
-    override def parallel[A]: Either[E, A] => Validated[E, A] = _.toValidated
+    override def parallel[A]: Disjunction[E, A] => Validated[E, A] = _.toValidated
 
-    // override def sequential: ~>[({type lam[Y] = Validated[E, Y]})#lam, ({type lam[Y] = Either[E, Y]})#lam] =
-    //      new (~>[({type lam[Y] = Validated[E, Y]})#lam, ({type lam[Y] = Either[E, Y]})#lam]) {
-    //        override def apply[A](value: Validated[E, A]): Either[E, A] = value.toEither
+    // override def sequential: ~>[({type lam[Y] = Validated[E, Y]})#lam, ({type lam[Y] = Disjunction[E, Y]})#lam] =
+    //      new (~>[({type lam[Y] = Validated[E, Y]})#lam, ({type lam[Y] = Disjunction[E, Y]})#lam]) {
+    //        override def apply[A](value: Validated[E, A]): Disjunction[E, A] = value.toDisjunction
     //      }
-    override def sequential[A]: Validated[E, A] => Either[E, A] = _.toEither
+    override def sequential[A]: Validated[E, A] => Disjunction[E, A] = _.toDisjunction
