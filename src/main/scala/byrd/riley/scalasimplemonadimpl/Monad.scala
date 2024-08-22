@@ -7,16 +7,14 @@ trait Monad[F[_]] extends FlatMap[F], Applicative[F]:
   
   extension[A](monad1: F[A])
     override def product[B](monad2: F[B]): F[TupleHelper.FlatConcat[A, B]] =
-    monad1.flatMap(value1 =>
-      monad2.flatMap { value2 =>
+    monad1.flatMap: value1 =>
+      monad2.flatMap: value2 =>
         val tuple1: TupleHelper.IdentityTuple[value1.type] = TupleHelper.getIdentityTupleFor(value1)
         val tuple2: TupleHelper.IdentityTuple[value2.type] = TupleHelper.getIdentityTupleFor(value2)
         val flat1: TupleHelper.Flat[tuple1.type] = tuple1.flatten
         val flat2: TupleHelper.Flat[tuple2.type] = tuple2.flatten
         val flattenedProduct: Tuple.Concat[flat1.type, flat2.type] = flat1 ++ flat2
         pure(flattenedProduct.asInstanceOf[TupleHelper.FlatConcat[A, B]])
-      }
-    )
 
     override def map[B](func: A => B): F[B] =
       monad1.flatMap(value => func(value).pure)
@@ -37,6 +35,3 @@ trait Monad[F[_]] extends FlatMap[F], Applicative[F]:
   // Provide a cleaner implementation of the identityFlatMapLaw since pure is available.
   override def identityFlatMapLaw[A](flatMap: F[A]): Unit =
     rightIdentityMonadLaw(flatMap)
-
-object Monad:
-  def apply[F[A]](using monad: Monad[F]): Monad[F] = monad

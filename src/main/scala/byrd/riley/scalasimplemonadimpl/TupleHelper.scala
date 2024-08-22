@@ -34,9 +34,8 @@ object TupleHelper:
             case innerTuple: Tuple => (innerTuple.flatten ++ tail.flatten).asInstanceOf[Flat[tuple.type]]
             case _ => (head *: tail.flatten).asInstanceOf[Flat[tuple.type]]
 
-    inline def flatMap[F[_] <: Tuple](f: [t] => t => F[t]): FlatMap[tuple.type, F] = {
+    inline def flatMap[F[_] <: Tuple](f: [t] => t => F[t]): FlatMap[tuple.type, F] =
       val mapping: Tuple.Map[tuple.type, F] = tuple.map(f)
       val flatMapping: FlatMap[tuple.type, F] = mapping.flatten.asInstanceOf[FlatMap[tuple.type, F]]
 
       flatMapping
-    }

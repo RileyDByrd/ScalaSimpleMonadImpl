@@ -10,7 +10,3 @@ trait Applicative[F[_]] extends Apply[F]:
   // Provide a cleaner implementation of the identityApplyLaw since pure is available.
   override def identityApplyLaw[A](applicative: F[A]): Unit =
     assert(identity[A].pure.ap(applicative) == applicative)
-
-
-object Applicative:
-  def apply[F[_]](using applicative: Applicative[F]): Applicative[F] = applicative

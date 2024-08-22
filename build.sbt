@@ -7,4 +7,4 @@ lazy val root = (project in file("."))
     name := "Scala Simple Monad Impl"
   )
 
-libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.14" % "test"
+libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.18" % "test"

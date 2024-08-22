@@ -24,9 +24,8 @@ trait Apply[F[_]] extends Semigroupal[F], Functor[F]:
       mapN(identity)
 
     def apWith[B](application: F[Tuple.InverseMap[tuple.type, F] => B]): F[B] =
-      application.product(invertedTuple).map {
+      application.product(invertedTuple).map:
         case (func: (Tuple.InverseMap[tuple.type, F] => B)) *: (tail: Tuple.InverseMap[tuple.type, F]) => func(tail).asInstanceOf[B]
-      }
 
   // Determine the type of the tuple.
   extension[T <: Tuple: Tuple.IsMappedBy[F]](tuple: T)
@@ -36,8 +35,6 @@ trait Apply[F[_]] extends Semigroupal[F], Functor[F]:
 
 
 object Apply:
-  def apply[F[A]: Apply](using apply: Apply[F]): Apply[F] = apply
-
   @tailrec
   private def invertMapLoop[F[_]: Apply, Z](tuple: Tuple, carryOver: Option[F[Z]]): F[Tuple.InverseMap[Tuple, F]] =
     tuple match

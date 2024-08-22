@@ -3,7 +3,7 @@ package byrd.riley.scalasimplemonadimpl
 import org.scalatest.funspec.AnyFunSpec
 
 class MyTest extends AnyFunSpec:
-  it("applicatives") {
+  it("applicatives"):
     import MonadInstances.Maybe.Attested
     import MonadInstances.Maybe
     import MonadInstances.given_Monad_Maybe
@@ -28,9 +28,8 @@ class MyTest extends AnyFunSpec:
     println(tupledTuple)
     println(apWithedTuple)
     println(appedFunc)
-  }
 
-  it("parallels") {
+  it("parallels"):
     import MonadInstances.{LinkedList, LinkedCons, LinkedNil, Disjunction}
     import MonadInstances.Disjunction.{Happy, Sad}
     import ParallelInstances.given_Parallel_LinkedList
@@ -83,5 +82,3 @@ class MyTest extends AnyFunSpec:
     println(parTupledTuple)
     println(parApWithedTuple)
     println(parAppedFunc)
-  }
-

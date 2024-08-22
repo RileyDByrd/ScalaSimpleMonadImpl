@@ -36,12 +36,13 @@ trait Parallel[M[_]]:
     def parMapN[A](func: Tuple.InverseMap[tuple.type, M] => A): M[A] =
       given FlatMap[M] = flatMap
       invertedTuple.map(func)
+      
     def parTupled: M[Tuple.InverseMap[tuple.type, M]] = parMapN(identity)
+    
     def parApWith[B](application: M[Tuple.InverseMap[tuple.type, M] => B]): M[B] =
       given FlatMap[M] = flatMap
-      application.parProduct(invertedTuple).map {
+      application.parProduct(invertedTuple).map:
         case (func: (Tuple.InverseMap[tuple.type, F] => B)) *: (tail: Tuple.InverseMap[tuple.type, M]) => func(tail).asInstanceOf[B]
-      }
 
   // Determine the type of the tuple.
   // Brings tuples under one M through several parProduct-like operations. However many
@@ -54,8 +55,6 @@ trait Parallel[M[_]]:
 
 
 object Parallel:
-  def apply[M[A]](using parallel: Parallel[M]): Parallel[M] = parallel
-
   @tailrec
   private def invertMapLoop[M[_], Z](tuple: Tuple, carryOver: Option[Parallel[M]#F[Z]])(using parallel: Parallel[M]): Parallel[M]#F[Tuple.InverseMap[Tuple, M]] =
     given Apply[parallel.F] = parallel.apply

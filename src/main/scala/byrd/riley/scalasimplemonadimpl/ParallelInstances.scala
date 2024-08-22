@@ -30,7 +30,7 @@ object ParallelInstances:
       extension [A](zipList1: ZipList[A])
         override def product[B](zipList2: ZipList[B]): ZipList[FlatConcat[A, B]] =
           val zippedList = zipList1.internalList.zip(zipList2.internalList)
-          val flattenedList: List[TupleHelper.FlatConcat[A, B]] = zippedList.map { tuple =>
+          val flattenedList: List[TupleHelper.FlatConcat[A, B]] = zippedList.map: tuple =>
             val tuple1: TupleHelper.IdentityTuple[tuple._1.type] = TupleHelper.getIdentityTupleFor(tuple._1)
             val tuple2: TupleHelper.IdentityTuple[tuple._2.type] = TupleHelper.getIdentityTupleFor(tuple._2)
             val flat1: TupleHelper.Flat[tuple1.type] = tuple1.flatten
@@ -38,7 +38,7 @@ object ParallelInstances:
             val flattenedProduct: Tuple.Concat[flat1.type, flat2.type] = flat1 ++ flat2
 
             flattenedProduct.asInstanceOf[TupleHelper.FlatConcat[A, B]]
-          }
+            
           ZipList(flattenedList)
 
       extension [A](zipList: ZipList[A])
@@ -49,7 +49,7 @@ object ParallelInstances:
 
 
     import MonadInstances.given_Monad_LinkedList
-    override def flatMap: FlatMap[LinkedList] = FlatMap[LinkedList]
+    override def flatMap: FlatMap[LinkedList] = summon
 
     // override def parallel: LinkedList ~> ZipList = new (LinkedList ~> ZipList) { override def apply[A](value: LinkedList[A]): ZipList[A] = ZipList(value.internalList) }
     override def parallel[A]: LinkedList[A] => ZipList[A] = linkedList => ZipList(linkedList.internalList)
@@ -128,7 +128,7 @@ object ParallelInstances:
           override def ap(validated: Validated[E, A]): Validated[E, B] = validated.ap(application)
 
     import MonadInstances.given_Monad_Disjunction
-    override def flatMap: FlatMap[Disjunction[E, _]] = FlatMap[Disjunction[E, _]]
+    override def flatMap: FlatMap[Disjunction[E, _]] = summon
 
     // override def parallel[A]: ({type lam[Y] = Disjunction[E, Y]})#lam[A] => ({type lam[Y] = Validated[E, Y]})#lam[A] = {
     //      new (({type lam[Y] = Disjunction[E, Y]})#lam[A] => ({type lam[Y] = Validated[E, Y]})#lam[A]) {

@@ -15,7 +15,3 @@ trait FlatMap[F[_]] extends Apply[F]:
   def identityFlatMapLaw[A](flatMap: F[A]): Unit =
     def flatMapIdentity[A](value: A) = flatMap.map(_ => value)
     assert(flatMap.flatMap(flatMapIdentity) == flatMap)
-
-
-object FlatMap:
-  def apply[F[A]](using flatMap: FlatMap[F]): FlatMap[F] = flatMap

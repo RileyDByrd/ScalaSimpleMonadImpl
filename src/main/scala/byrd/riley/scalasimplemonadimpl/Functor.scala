@@ -11,6 +11,3 @@ trait Functor[F[_]]:
   // Associativity: mapping over f and then mapping over g is the same as mapping over two functions f and g.
   def associativeFunctorLaw[A, B, C](functor: F[A], funcF: A => B, funcG: B => C): Unit =
     assert(functor.map(funcF).map(funcG) == functor.map(value => funcG(funcF(value))))
-
-object Functor:
-  def apply[F[_]](using functor: Functor[F]): Functor[F] = functor
