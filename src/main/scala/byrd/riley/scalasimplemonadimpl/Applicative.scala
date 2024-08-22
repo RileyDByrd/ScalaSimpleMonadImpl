@@ -1,7 +1,5 @@
 package byrd.riley.scalasimplemonadimpl
 
-import scala.annotation.tailrec
-
 // "Applicative" is short for "Applicative Functor".
 trait Applicative[F[_]] extends Apply[F]:
   // i.e. wrap
