@@ -1,6 +1,7 @@
 package byrd.riley.scalasimplemonadimpl
 
-import scala.Tuple.{Concat, Map}
+import scala.CanEqual.derived
+import scala.Tuple.{ Concat, Map }
 
 object TupleHelper:
   type Flat[T <: Tuple] <: Tuple =
@@ -19,6 +20,9 @@ object TupleHelper:
 
   type FlatConcat[A, B] = Concat[Flat[IdentityTuple[A]], Flat[IdentityTuple[B]]]
 
+  given CanEqual[EmptyTuple, Tuple] = derived
+  given CanEqual[Tuple, EmptyTuple] = derived
+  
   // These functions do not rely on any Category class.
   def getIdentityTupleFor[A](value: A): TupleHelper.IdentityTuple[A] =
     value match

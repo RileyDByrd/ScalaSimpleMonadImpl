@@ -6,7 +6,7 @@ class MyTest extends AnyFunSpec:
   it("applicatives"):
     import MonadInstances.Maybe.Attested
     import MonadInstances.Maybe
-    import MonadInstances.given_Monad_Maybe
+    import MonadInstances.given_is_Maybe_Monad
 
     val func = (_: Int) + 3
     val maybeProduct = Attested(3).product(Attested(3))
@@ -32,17 +32,17 @@ class MyTest extends AnyFunSpec:
   it("parallels"):
     import MonadInstances.{LinkedList, LinkedCons, LinkedNil, Disjunction}
     import MonadInstances.Disjunction.{Happy, Sad}
-    import ParallelInstances.given_Parallel_LinkedList
+    import ParallelInstances.given_is_LinkedList_Parallel
 
     val list1 = LinkedCons(1, LinkedCons(2, LinkedNil))
     val list2 = LinkedCons(3, LinkedCons(4, LinkedNil))
     val listProduct = list1.product(list2)
     val listParProduct = list1.parProduct(list2)
 
-    import ParallelInstances.given_Parallel_Disjunction
+    import ParallelInstances.given_is_Disjunction_Parallel
 
     // Required when parProduct on an Either encounters more than one Left.
-    given errorSemigroup: Semigroup[String] = (x: String, y: String) => s"$x, $y"
+    given errorSemigroup: String is Semigroup = (x: String, y: String) => s"$x, $y"
 
     val sad1: Disjunction[String, Int] = Sad("Error1")
     val sad2: Disjunction[String, Int] = Sad("Error2")

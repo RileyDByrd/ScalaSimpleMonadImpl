@@ -7,18 +7,18 @@ import scala.collection.mutable.ListBuffer
 object MonadInstances:
   // Define some commonly used Monads.
 
-  enum Maybe[+A]:
+  enum Maybe[+A] derives CanEqual:
     case Attested(value: A)
     case Unattested
 
   import Maybe.*
 
-  given Monad[Maybe] = new Monad[Maybe]:
+  given Maybe is Monad:
     extension [A](value: A)
       override def pure: Maybe[A] = Attested(value)
-    extension [A](option: Maybe[A])
+    extension [A](maybe: Maybe[A])
       override def flatMap[B](func: A => Maybe[B]): Maybe[B] =
-        option match
+        maybe match
           case Attested(value)   => func(value)
           case Unattested        => Unattested
 
@@ -35,7 +35,7 @@ object MonadInstances:
     def apply[A](list: List[A]): LinkedList[A] =
       list.foldLeft(LinkedNil: LinkedList[A])((linkedList, elem) => LinkedCons(elem, linkedList))
 
-  given Monad[LinkedList] = new Monad[LinkedList]:
+  given LinkedList is Monad:
     extension [A](value: A)
       override def pure: LinkedList[A] = LinkedCons(value, LinkedNil)
     extension [A](list: LinkedList[A])
@@ -50,25 +50,36 @@ object MonadInstances:
 
         LinkedList(listToReturn.toList)
 
-  given Monad[Id] = new Monad[Id]:
+  given Id is Monad:
     extension [A](value: A)
       override def pure: Id[A] = value
     extension [A](value: Id[A])
       override def flatMap[B](func: A => Id[B]): Id[B] = func(value)
       override def map[B](func: A => B): Id[B] = func(value)
 
-  enum Disjunction[+A, +B]:
-    case Sad(value: A)
-    case Happy(value: B)
-  
+  enum Disjunction[+E, +A]:
+    case Sad(value: E)
+    case Happy(value: A)
+
+  object Disjunction:
+    extension[E, A](disjunction: Disjunction[E, A])
+      def isHappy: Boolean =
+        disjunction match
+          case Sad(_)   => false
+          case Happy(_) => true
+      def isSad: Boolean =
+        disjunction match
+          case Sad(_)   => true
+          case Happy(_) => false
+
   import Disjunction.*
-    
+
   // The Either Monad requires kind projection.
-  given[C]: Monad[Disjunction[C, _]] = new Monad[Disjunction[C, _]]:
+  given [E] => Disjunction[E, _] is Monad:
     extension [A](value: A)
-      override def pure: Disjunction[C, A] = Happy(value)
-    extension [A](either: Disjunction[C, A])
-      override def flatMap[B](func: A => Disjunction[C, B]): Disjunction[C, B] =
-      either match
+      override def pure: Disjunction[E, A] = Happy(value)
+    extension [A](disjunction: Disjunction[E, A])
+      override def flatMap[B](func: A => Disjunction[E, B]): Disjunction[E, B] =
+      disjunction match
         case Happy(value) => func(value)
         case Sad(value) => Sad(value)

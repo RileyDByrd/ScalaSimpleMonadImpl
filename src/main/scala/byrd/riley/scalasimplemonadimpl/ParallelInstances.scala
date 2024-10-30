@@ -21,12 +21,12 @@ object ParallelInstances:
     def apply[A](list: List[A]): ZipList[A] =
       list.foldLeft(ZipNil: ZipList[A])((linkedList, elem) => ZipCons(elem, linkedList))
 
-  given Parallel[LinkedList] = new Parallel[LinkedList]:
+  given LinkedList is Parallel:
     import TupleHelper.flatten
 
-    override type F[A] = ZipList[A]
+    override type Effect[F] = ZipList[F]
 
-    override def apply: Apply[ZipList] = new Apply[ZipList]:
+    override def apply: ZipList is Apply = new (ZipList is Apply):
       extension [A](zipList1: ZipList[A])
         override def product[B](zipList2: ZipList[B]): ZipList[FlatConcat[A, B]] =
           val zippedList = zipList1.internalList.zip(zipList2.internalList)
@@ -38,7 +38,7 @@ object ParallelInstances:
             val flattenedProduct: Tuple.Concat[flat1.type, flat2.type] = flat1 ++ flat2
 
             flattenedProduct.asInstanceOf[TupleHelper.FlatConcat[A, B]]
-            
+
           ZipList(flattenedList)
 
       extension [A](zipList: ZipList[A])
@@ -48,8 +48,7 @@ object ParallelInstances:
         override def ap(zipList: ZipList[A]): ZipList[B] = ZipList(application.internalList.lazyZip(zipList.internalList).map(_.apply(_)))
 
 
-    import MonadInstances.given_Monad_LinkedList
-    override def flatMap: FlatMap[LinkedList] = summon
+    override def flatMap: LinkedList is FlatMap = MonadInstances.given_is_LinkedList_Monad
 
     // override def parallel: LinkedList ~> ZipList = new (LinkedList ~> ZipList) { override def apply[A](value: LinkedList[A]): ZipList[A] = ZipList(value.internalList) }
     override def parallel[A]: LinkedList[A] => ZipList[A] = linkedList => ZipList(linkedList.internalList)
@@ -60,54 +59,28 @@ object ParallelInstances:
   // parTupled for a Disjunction requires that the left type be a Semigroup because, unlike product, it does not fail fast.
   // If it encounters more than one left, it will combine them as defined in Semigroup.combine. For rights, output
   // should be unchanged.
-  import Validated._
-  class Validated[+E, +A]:
-    def isValid: Boolean =
-      this match
-        case Invalid(_) => false
-        case _ => true
-    def isInvalid: Boolean =
-      this match
-        case Invalid(_) => true
-        case _ => false
-
-    def map[B](func: A => B): Validated[E, B] =
-      this match
-        case i @ Invalid(_) => i
-        case Valid(value) => Valid(func(value))
-
-    def ap[EE >: E, B](other: Validated[EE, A => B])(using EE: Semigroup[EE]): Validated[EE, B] =
-      (this, other) match
-        case (Valid(value), Valid(func)) => Valid(func(value))
-        case (Invalid(error1), Invalid(error2)) => Invalid(EE.combine(error2, error1))
-        case (error @ Invalid(_), _) => error
-        case (_, error @ Invalid(_)) => error
-
-    def toDisjunction: Disjunction[E, A] =
-      this match
-        case Invalid(error) => Sad(error)
-        case Valid(value) => Happy(value)
-
-    def withDisjunction[EE, B](func: Disjunction[E, A] => Disjunction[EE, B]): Validated[EE, B] = func(toDisjunction).toValidated
+  enum Validated[+E, +A]:
+    case Valid(value: A)
+    case Invalid(value: E)
 
   object Validated:
-    case class Valid[+A](value: A) extends Validated[Nothing, A]
-    case class Invalid[+E](value: E) extends Validated[E, Nothing]
+    extension[E, A](validated: Validated[E, A])
+      def isValid: Boolean =
+        validated match
+          case Invalid(_) => false
+          case Valid(_)   => true
+      def isInvalid: Boolean =
+        validated match
+          case Invalid(_) => true
+          case Valid(_)   => false
 
-    def product[EE, A, B](first: Validated[EE, A], second: Validated[EE, B])(using EE: Semigroup[EE]): Validated[EE, TupleHelper.FlatConcat[A, B]] =
-      (first, second) match
-        case (Valid(thisValue), Valid(thatValue)) =>
-          val tuple1: TupleHelper.IdentityTuple[thisValue.type] = TupleHelper.getIdentityTupleFor(thisValue)
-          val tuple2: TupleHelper.IdentityTuple[thatValue.type] = TupleHelper.getIdentityTupleFor(thatValue)
-          val flat1: TupleHelper.Flat[tuple1.type] = TupleHelper.flatten(tuple1)
-          val flat2: TupleHelper.Flat[tuple2.type] = TupleHelper.flatten(tuple2)
-          val flattenedProduct: Tuple.Concat[flat1.type, flat2.type] = flat1 ++ flat2
+      def toDisjunction: Disjunction[E, A] =
+        validated match
+          case Invalid(error) => Sad(error)
+          case Valid(value)   => Happy(value)
 
-          Valid(flattenedProduct.asInstanceOf[FlatConcat[A, B]])
-
-        case (Invalid(error1), Invalid(error2)) => Invalid(EE.combine(error1, error2))
-        case (error@Invalid(_), _) => error
-        case (_, error@Invalid(_)) => error
+      def withDisjunction[EE, B](func: Disjunction[E, A] => Disjunction[EE, B]): Validated[EE, B] =
+        func(toDisjunction).toValidated
 
     extension[E, A](disjunction: Disjunction[E, A])
       def toValidated: Validated[E, A] =
@@ -115,20 +88,42 @@ object ParallelInstances:
           case Sad(error) => Invalid(error)
           case Happy(value) => Valid(value)
 
-  given[E: Semigroup]: Parallel[Disjunction[E, _]] = new Parallel[Disjunction[E, _]]:
-    override type F[A] = Validated[E, A]
+  given [E: Semigroup as semigroup] => Disjunction[E, _] is Parallel:
+    import Validated.*
+    override type Effect[F] = Validated[E, F]
 
-    override def apply: Apply[Validated[E, _]] =
-      new Apply[Validated[E, _]]:
-        extension [A](validated1: Validated[E, A])
-          override def product[B](validated2: Validated[E, B]): Validated[E, FlatConcat[A, B]] = Validated.product(validated1, validated2)
-        extension [A](validated: Validated[E, A])
-          override def map[B](func: A => B): Validated[E, B] = validated.map(func)
-        extension [A, B](application: Validated[E, A => B])
-          override def ap(validated: Validated[E, A]): Validated[E, B] = validated.ap(application)
+    override def apply: Validated[E, _] is Apply = new (Validated[E, _] is Apply):
+      extension [A](validated1: Validated[E, A])
+        override def product[B](validated2: Validated[E, B]): Validated[E, FlatConcat[A, B]] =
+          (validated1, validated2) match
+            case (Valid(thisValue), Valid(thatValue)) =>
+              val tuple1: TupleHelper.IdentityTuple[thisValue.type] = TupleHelper.getIdentityTupleFor(thisValue)
+              val tuple2: TupleHelper.IdentityTuple[thatValue.type] = TupleHelper.getIdentityTupleFor(thatValue)
+              val flat1: TupleHelper.Flat[tuple1.type] = TupleHelper.flatten(tuple1)
+              val flat2: TupleHelper.Flat[tuple2.type] = TupleHelper.flatten(tuple2)
+              val flattenedProduct: Tuple.Concat[flat1.type, flat2.type] = flat1 ++ flat2
 
-    import MonadInstances.given_Monad_Disjunction
-    override def flatMap: FlatMap[Disjunction[E, _]] = summon
+              Valid(flattenedProduct.asInstanceOf[FlatConcat[A, B]])
+
+            case (Invalid(error1), Invalid(error2)) => Invalid(semigroup.combine(error1, error2))
+            case (error @ Invalid(_), _) => error.asInstanceOf[Invalid[E, FlatConcat[A, B]]]
+            case (_, error @ Invalid(_)) => error.asInstanceOf[Invalid[E, FlatConcat[A, B]]]
+
+      extension [A](validated: Validated[E, A])
+        override def map[B](func: A => B): Validated[E, B] =
+          validated match
+            case invalid @ Invalid(_) => invalid.asInstanceOf[Invalid[E, B]]
+            case Valid(value)         => Valid(func(value))
+
+      extension [A, B](application: Validated[E, A => B])
+        override def ap(validated: Validated[E, A]): Validated[E, B] =
+          (validated, application) match
+            case (Valid(value), Valid(func)) => Valid(func(value))
+            case (Invalid(error1), Invalid(error2)) => Invalid(semigroup.combine(error2, error1))
+            case (error@Invalid(_), _) => error.asInstanceOf[Invalid[E, B]]
+            case (_, error@Invalid(_)) => error.asInstanceOf[Invalid[E, B]]
+
+    override def flatMap: Disjunction[E, _] is FlatMap = MonadInstances.given_is_Disjunction_Monad
 
     // override def parallel[A]: ({type lam[Y] = Disjunction[E, Y]})#lam[A] => ({type lam[Y] = Validated[E, Y]})#lam[A] = {
     //      new (({type lam[Y] = Disjunction[E, Y]})#lam[A] => ({type lam[Y] = Validated[E, Y]})#lam[A]) {
