@@ -1,25 +1,30 @@
 package byrd.riley.scalasimplemonadimpl
 
+import scala.CanEqual.derived
+
 import MonadInstances.Disjunction.{Happy, Sad}
-import MonadInstances.{Disjunction, LinkedList}
+import MonadInstances.{Disjunction, LinkedList, LinkedCons, LinkedNil}
 import TupleHelper.FlatConcat
 
 object ParallelInstances:
   // Define some commonly used Parallels.
 
   // parTupled for a List will zip the lists rather than find the cartesian product of them.
-  sealed trait ZipList[+A]:
-    def internalList: List[A]
+  opaque type ZipList[+A] = LinkedList[A]
 
-  final case class ZipCons[+A](head: A, tail: ZipList[A]) extends ZipList[A]:
-    override val internalList: List[A] = scala.collection.immutable.::(head, tail.internalList)
+  opaque type ZipCons[+A] <: ZipList[A] = LinkedCons[A]
+  object ZipCons:
+    export LinkedCons.unapply
+    final def apply[A](head: A, tail: ZipList[A]): ZipList[A] = LinkedCons.apply(head, tail)
 
-  case object ZipNil extends ZipList[Nothing]:
-    override val internalList: List[Nothing] = Nil
+  opaque type ZipNil <: ZipList[Nothing] = LinkedNil.type
+  val ZipNil: ZipNil = LinkedNil
 
   object ZipList:
-    def apply[A](list: List[A]): ZipList[A] =
-      list.foldLeft(ZipNil: ZipList[A])((linkedList, elem) => ZipCons(elem, linkedList))
+    def apply[A](list: List[A]): ZipList[A] = LinkedList(list)
+
+  given [A]: CanEqual[ZipList[A], ZipNil] = derived
+  given [A]: CanEqual[ZipNil, ZipList[A]] = derived
 
   given LinkedList is Parallel:
     import TupleHelper.flatten
@@ -51,45 +56,42 @@ object ParallelInstances:
     override def flatMap: LinkedList is FlatMap = MonadInstances.given_is_LinkedList_Monad
 
     // override def parallel: LinkedList ~> ZipList = new (LinkedList ~> ZipList) { override def apply[A](value: LinkedList[A]): ZipList[A] = ZipList(value.internalList) }
-    override def parallel[A]: LinkedList[A] => ZipList[A] = linkedList => ZipList(linkedList.internalList)
+    override def parallel[A]: LinkedList[A] => ZipList[A] = identity
 
     // override def sequential: ZipList ~> LinkedList = new (ZipList ~> LinkedList) { override def apply[A](value: ZipList[A]): LinkedList[A] = LinkedList(value.internalList) }
-    override def sequential[A]: ZipList[A] => LinkedList[A] = zippedList => LinkedList(zippedList.internalList)
+    override def sequential[A]: ZipList[A] => LinkedList[A] = identity
 
   // parTupled for a Disjunction requires that the left type be a Semigroup because, unlike product, it does not fail fast.
   // If it encounters more than one left, it will combine them as defined in Semigroup.combine. For rights, output
   // should be unchanged.
-  enum Validated[+E, +A]:
-    case Valid(value: A)
-    case Invalid(value: E)
-
+  opaque type Validated[+E, +A] = Disjunction[E, A]
   object Validated:
+
+    opaque type Valid[+E, +A] <: Validated[E, A] = Disjunction.Happy[E, A]
+    object Valid:
+      export Disjunction.Happy.unapply
+      final def apply[E, A](value: A): Valid[E, A] = Disjunction.Happy.apply[E, A](value)
+
+    opaque type Invalid[+E, +A] <: Validated[E, A] = Disjunction.Sad[E, A]
+    object Invalid:
+      export Disjunction.Sad.unapply
+      final def apply[E, A](value: E): Invalid[E, A] = Disjunction.Sad.apply[E, A](value)
+
     extension[E, A](validated: Validated[E, A])
-      def isValid: Boolean =
-        validated match
-          case Invalid(_) => false
-          case Valid(_)   => true
-      def isInvalid: Boolean =
-        validated match
-          case Invalid(_) => true
-          case Valid(_)   => false
+      def isValid: Boolean = validated.isHappy
 
-      def toDisjunction: Disjunction[E, A] =
-        validated match
-          case Invalid(error) => Sad(error)
-          case Valid(value)   => Happy(value)
+      def isInvalid: Boolean = validated.isSad
 
-      def withDisjunction[EE, B](func: Disjunction[E, A] => Disjunction[EE, B]): Validated[EE, B] =
-        func(toDisjunction).toValidated
+      def toDisjunction: Disjunction[E, A] = validated
+
+      def withDisjunction[EE, B](func: Disjunction[E, A] => Disjunction[EE, B]): Validated[EE, B] = func(validated)
 
     extension[E, A](disjunction: Disjunction[E, A])
-      def toValidated: Validated[E, A] =
-        disjunction match
-          case Sad(error) => Invalid(error)
-          case Happy(value) => Valid(value)
+      def toValidated: Validated[E, A] = disjunction
+
+  import Validated.*
 
   given [E: Semigroup as semigroup] => Disjunction[E, _] is Parallel:
-    import Validated.*
     override type Effect[F] = Validated[E, F]
 
     override def apply: Validated[E, _] is Apply = new (Validated[E, _] is Apply):
@@ -130,10 +132,10 @@ object ParallelInstances:
     //        override def apply(value: Disjunction[E, A]): Validated[E, A] = value.toValidated
     //      }
     //    }
-    override def parallel[A]: Disjunction[E, A] => Validated[E, A] = _.toValidated
+    override def parallel[A]: Disjunction[E, A] => Validated[E, A] = identity
 
     // override def sequential: ~>[({type lam[Y] = Validated[E, Y]})#lam, ({type lam[Y] = Disjunction[E, Y]})#lam] =
     //      new (~>[({type lam[Y] = Validated[E, Y]})#lam, ({type lam[Y] = Disjunction[E, Y]})#lam]) {
     //        override def apply[A](value: Validated[E, A]): Disjunction[E, A] = value.toDisjunction
     //      }
-    override def sequential[A]: Validated[E, A] => Disjunction[E, A] = _.toDisjunction
+    override def sequential[A]: Validated[E, A] => Disjunction[E, A] = identity

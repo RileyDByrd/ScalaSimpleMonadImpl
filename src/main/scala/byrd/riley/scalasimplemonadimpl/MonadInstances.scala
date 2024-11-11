@@ -25,7 +25,7 @@ object MonadInstances:
   sealed trait LinkedList[+A]:
     def internalList: List[A]
 
-  final case class LinkedCons[+A](head: A, tail: LinkedList[A]) extends LinkedList[A]:
+  case class LinkedCons[+A](head: A, tail: LinkedList[A]) extends LinkedList[A]:
     override val internalList: List[A] = scala.collection.immutable.::(head, tail.internalList)
 
   case object LinkedNil extends LinkedList[Nothing]:

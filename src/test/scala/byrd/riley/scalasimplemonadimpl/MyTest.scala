@@ -53,7 +53,7 @@ class MyTest extends AnyFunSpec:
     val mixedProduct = sad1.product(happy1)
     val mixedParProduct = sad1.parProduct(happy1)
     val happyProduct = happy1.product(happy2).product(happy2)
-    val happyParProduct = happy1.parProduct(happy2).product(happy2)
+    val happyParProduct = happy1.parProduct(happy2).parProduct(happy2)
 
     println(listProduct)
     println(listParProduct)
