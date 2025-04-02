@@ -3,7 +3,7 @@ package byrd.riley.scalasimplemonadimpl
 import scala.CanEqual.derived
 
 import MonadInstances.Disjunction.{Happy, Sad}
-import MonadInstances.{Disjunction, LinkedList, LinkedCons, LinkedNil}
+import MonadInstances.{Disjunction, LinkedCons, LinkedList, LinkedNil}
 import TupleHelper.FlatConcat
 
 object ParallelInstances:
@@ -42,6 +42,7 @@ object ParallelInstances:
             val flat2: TupleHelper.Flat[tuple2.type] = tuple2.flatten
             val flattenedProduct: Tuple.Concat[flat1.type, flat2.type] = flat1 ++ flat2
 
+            //noinspection ScalaRedundantCast
             flattenedProduct.asInstanceOf[TupleHelper.FlatConcat[A, B]]
 
           ZipList(flattenedList)
@@ -64,18 +65,38 @@ object ParallelInstances:
   // parTupled for a Disjunction requires that the left type be a Semigroup because, unlike product, it does not fail fast.
   // If it encounters more than one left, it will combine them as defined in Semigroup.combine. For rights, output
   // should be unchanged.
+
   opaque type Validated[+E, +A] = Disjunction[E, A]
   object Validated:
+//    override def ordinal(x: MirroredMonoType): Int = x.ordinal
+//    override type MirroredMonoType = Validated[Any, Any]
+//    override type MirroredLabel = "Validated"
+//    override type MirroredElemLabels = ("Valid", "Invalid")
 
     opaque type Valid[+E, +A] <: Validated[E, A] = Disjunction.Happy[E, A]
+
     object Valid:
+//      final def unapply[E, A](x$1: Valid[E, A]): Valid[E, A] = Disjunction.Happy.unapply(x$1)
       export Disjunction.Happy.unapply
       final def apply[E, A](value: A): Valid[E, A] = Disjunction.Happy.apply[E, A](value)
 
+//      override def fromProduct(p: Product): MirroredMonoType = Valid(p.productElement(0))
+//      override type MirroredMonoType = Valid[Any, Any]
+//      override type MirroredLabel = "Valid"
+//      override type MirroredElemLabels = Tuple1["Valid"]
+
     opaque type Invalid[+E, +A] <: Validated[E, A] = Disjunction.Sad[E, A]
+
     object Invalid:
+//      final def unapply[E, A](x$1: Invalid[E, A]): Invalid[E, A] = Disjunction.Sad.unapply(x$1)
       export Disjunction.Sad.unapply
       final def apply[E, A](value: E): Invalid[E, A] = Disjunction.Sad.apply[E, A](value)
+
+//      override def fromProduct(p: Product): MirroredMonoType = Invalid(p.productElement(0))
+//      override type MirroredMonoType = Invalid[Any, Any]
+//      override type MirroredLabel = "Invalid"
+//      override type MirroredElemLabels = Tuple1["Invalid"]
+
 
     extension[E, A](validated: Validated[E, A])
       def isValid: Boolean = validated.isHappy
@@ -105,25 +126,26 @@ object ParallelInstances:
               val flat2: TupleHelper.Flat[tuple2.type] = TupleHelper.flatten(tuple2)
               val flattenedProduct: Tuple.Concat[flat1.type, flat2.type] = flat1 ++ flat2
 
+              //noinspection ScalaRedundantCast
               Valid(flattenedProduct.asInstanceOf[FlatConcat[A, B]])
 
             case (Invalid(error1), Invalid(error2)) => Invalid(semigroup.combine(error1, error2))
-            case (error @ Invalid(_), _) => error.asInstanceOf[Invalid[E, FlatConcat[A, B]]]
-            case (_, error @ Invalid(_)) => error.asInstanceOf[Invalid[E, FlatConcat[A, B]]]
+            case (Invalid(error), _) => Invalid(error)
+            case (_, Invalid(error)) => Invalid(error)
 
       extension [A](validated: Validated[E, A])
         override def map[B](func: A => B): Validated[E, B] =
           validated match
-            case invalid @ Invalid(_) => invalid.asInstanceOf[Invalid[E, B]]
-            case Valid(value)         => Valid(func(value))
+            case Invalid(error) => Invalid(error)
+            case Valid(value)   => Valid(func(value))
 
       extension [A, B](application: Validated[E, A => B])
         override def ap(validated: Validated[E, A]): Validated[E, B] =
           (validated, application) match
             case (Valid(value), Valid(func)) => Valid(func(value))
             case (Invalid(error1), Invalid(error2)) => Invalid(semigroup.combine(error2, error1))
-            case (error@Invalid(_), _) => error.asInstanceOf[Invalid[E, B]]
-            case (_, error@Invalid(_)) => error.asInstanceOf[Invalid[E, B]]
+            case (Invalid(error), _) => Invalid(error)
+            case (_, Invalid(error)) => Invalid(error)
 
     override def flatMap: Disjunction[E, _] is FlatMap = MonadInstances.given_is_Disjunction_Monad
 
